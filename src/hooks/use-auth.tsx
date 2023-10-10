@@ -39,13 +39,14 @@ export function useAuthState() {
   }, [])
 
   useEffect(() => {
-    if ( !session?.$id ) return;
+    if ( !session ) return;
+
     (async function run() {
       const { teams } = await getTeams();
       const isAdmin = !!teams.find(team => team.$id === import.meta.env.VITE_APPWRITE_TEAM_ADMIN_ID)
       setIsAdmin(isAdmin);
     })();
-  }, [session?.$id])
+  }, [session])
 
   async function logOut() {
     await deleteCurrentSession();
@@ -70,7 +71,7 @@ export function useAuth() {
   const auth = useContext(AuthContext);
 
   if ( !auth ) {
-    throw new Error('useAuth can not be used outside of AuthContext')
+    throw new Error('useAuth no puede ser utilizado fuera de AuthContext')
   }
 
   return auth;
