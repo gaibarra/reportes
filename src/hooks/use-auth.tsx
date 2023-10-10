@@ -7,9 +7,9 @@ import { getTeams } from '@/lib/user';
 interface LiveBeatAuthContext {
   session?: Models.Session;
   isAdmin?: boolean;
-  logIn: Function;
-  logOut: Function;
-  verifySession: Function;
+  logIn: (email: string) => Promise<Models.Token>;
+  logOut: () => Promise<void>;
+  verifySession: (options: VerifySessionOptions) => Promise<void>;
 }
 
 export const AuthContext = createContext<LiveBeatAuthContext | undefined>(undefined)
@@ -39,7 +39,7 @@ export function useAuthState() {
   }, [])
 
   useEffect(() => {
-    if ( !session ) return;
+    if (!session) return;
 
     (async function run() {
       const { teams } = await getTeams();
@@ -70,7 +70,7 @@ export function useAuthState() {
 export function useAuth() {
   const auth = useContext(AuthContext);
 
-  if ( !auth ) {
+  if (!auth) {
     throw new Error('useAuth no puede ser utilizado fuera de AuthContext')
   }
 
