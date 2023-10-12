@@ -15,6 +15,7 @@ function LogIn() {
   const [, navigate] = useLocation();
   const { session, logIn } = useAuth();
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
 
   async function handleOnSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
@@ -28,9 +29,9 @@ function LogIn() {
       setSent(true);
     } catch(error: unknown) {
       if ( error instanceof AppwriteException ) {
-        navigate(`${window.location.pathname}?error=${error.type}`)
+        setError(error.type);
       } else {
-        navigate(`${window.location.pathname}?error=unknown_error`)
+        setError('unknown_error');
       }
     }
   }
@@ -49,9 +50,11 @@ function LogIn() {
           <form className="max-w-xs border border-slate-200 dark:border-slate-500 rounded p-6 mx-auto" onSubmit={handleOnSubmit}>
             <FormRow className="mb-5">
               <FormLabel htmlFor="email">Email</FormLabel>
-              <InputText id="email" name="email" type="email" />
+              <InputText id="email" name="email" type="email" required />
             </FormRow>
-
+            {error && (
+              <p className="text-center text-red-500">An error occurred. Please try again later.</p>
+            )}
             <Button>Submit</Button>
           </form>
         )}
