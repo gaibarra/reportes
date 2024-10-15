@@ -10,25 +10,30 @@ def get_default_task():
     )
     return task
 
+
+
 class Task(models.Model):
+    PRIORIDAD_CHOICES = [
+        ('Alta', 'Alta'),
+        ('Media', 'Media'),
+        ('Baja', 'Baja'),
+    ]
+
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     fecha_creacion = models.DateTimeField(default=timezone.now)
     fecha_resolucion = models.DateTimeField(null=True, blank=True)
     foto_inicial = models.ImageField(upload_to="fotos/", null=True, blank=True)
     foto_final = models.ImageField(upload_to="fotos/", null=True, blank=True)
-    reportado_por = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, related_name="reportes_creados"
-    )
-    resuelto_por = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="reportes_resueltos",
-    )
+    reportado_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="reportes_creados")
+    resuelto_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="reportes_resueltos")
     campus = models.CharField(max_length=100, default="Montejo")
     done = models.BooleanField(default=False)
+    prioridad = models.CharField(
+        max_length=5,
+        choices=PRIORIDAD_CHOICES,
+        default='Media'
+    )
 
     def __str__(self):
         return self.title

@@ -1,22 +1,18 @@
-from rest_framework import status
-from .models import Task
-from django.shortcuts import get_object_or_404
-from rest_framework.decorators import api_view, parser_classes
-from rest_framework.parsers import JSONParser
-from rest_framework.views import APIView
 from rest_framework import status, viewsets
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.shortcuts import get_object_or_404
 from django.conf import settings
-from openai import OpenAI
 from rest_framework.generics import RetrieveAPIView
 import logging
 import openai
 
+from .models import Task, Empleado, Evento, Report
 from .serializer import (
     TaskSerializer,
     EmpleadoSerializer,
@@ -24,16 +20,11 @@ from .serializer import (
     CustomUserDetailsSerializer,
     ReportSerializer,
 )
-from .models import Task, Empleado, Evento, Report
 
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-
-# Initialize OpenAI client
 openai.api_key = settings.OPENAI_API_KEY
-
-
 
 class ReportCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -60,40 +51,6 @@ class ReportCreateView(APIView):
                 # Retrieve the pre-defined assistant
                 assistant_id = "asst_dcExn8qhMa97OCBxqOOHxI4m"
 
-                # Create a thread
-                # # thread = openai.Thread.create()
-
-                # # # Add the user's message to the thread
-                # # message = openai.Thread.Message.create(
-                # #     thread_id=thread.id,
-                # #     role="user",
-                # #     content=prompt
-                # # )
-
-                # # # Event handler to manage the response
-                # # class EventHandler(openai.AssistantEventHandler):
-                # #     def on_text_created(self, text) -> None:
-                # #         print(f"\nassistant > ", end="", flush=True)
-
-                # #     def on_text_delta(self, delta, snapshot):
-                # #         print(delta.value, end="", flush=True)
-
-                # # # Execute the thread with the assistant
-                # # with openai.Thread.Run.stream(
-                # #     thread_id=thread.id,
-                # #     assistant_id=assistant_id,
-                # #     instructions="Please generate a detailed report.",
-                # #     event_handler=EventHandler(),
-                # # ) as stream:
-                # #     stream.until_done()
-
-                # # # Extract the generated response
-                # # assistant_response = message.content
-
-                # # # Save the GPT-generated report content
-                # # report.gpt_report = assistant_response.strip()
-                # # report.save()
-
                 return Response(
                     {"report": ReportSerializer(report).data},
                     status=status.HTTP_201_CREATED,
@@ -108,8 +65,6 @@ class ReportCreateView(APIView):
         else:
             logger.error(f"Errores del serializador: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 class CurrentUserView(APIView):
     permission_classes = [IsAuthenticated]
@@ -134,7 +89,6 @@ class CurrentUserView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 class LoginView(APIView):
     def post(self, request):
         username = request.data.get("username")
@@ -155,24 +109,26 @@ class LoginView(APIView):
             {"error": "Credenciales inválidas"}, status=status.HTTP_400_BAD_REQUEST
         )
 
-
 class TaskView(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
     queryset = Task.objects.all()
     permission_classes = [IsAuthenticated]
 
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        if instance.done and not instance.resuelto_por:
+            instance.resuelto_por = self.request.user
+            instance.save()
 
 class EmpleadoView(viewsets.ModelViewSet):
     queryset = Empleado.objects.all()
     serializer_class = EmpleadoSerializer
     permission_classes = [IsAuthenticated]
 
-
 class EventoView(viewsets.ModelViewSet):
     queryset = Evento.objects.all()
     serializer_class = EventoSerializer
     permission_classes = [IsAuthenticated]
-
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
@@ -195,7 +151,6 @@ def task_events(request, task_id):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 class MyProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -211,7 +166,6 @@ class MyProfileView(APIView):
                 "message": "Datos del perfil recuperados con éxito",
             }
         )
-
 
 class GPTResponseView(APIView):
     def post(self, request, *args, **kwargs):
@@ -241,13 +195,11 @@ class GPTResponseView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
+
 class GPTReportDetailView(RetrieveAPIView):
     queryset = Report.objects.all()
     serializer_class = ReportSerializer
     lookup_field = 'id'  # Asegúrate de que el campo de búsqueda sea 'id'
-
-
 
 @api_view(['DELETE'])
 def delete_task_image(request, pk, image_field):
@@ -260,7 +212,7 @@ def delete_task_image(request, pk, image_field):
         task.foto_final.delete()
     
     return Response(status=status.HTTP_204_NO_CONTENT)
- 
+
 @api_view(['GET'])
 def empleado_detail(request):
     try:

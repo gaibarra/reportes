@@ -1,7 +1,8 @@
 import axios from 'axios';
 import authService from './authService'; // Asegúrate de que esto esté correctamente importado
 
-const API_URL = process.env.VITE_BACKEND_URL || 'https://rerportes.click';
+// const API_URL = process.env.VITE_BACKEND_URL || 'https://rerportes.click';
+const API_URL = process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000/'
 
 const axiosInstance = axios.create({
   baseURL: API_URL,

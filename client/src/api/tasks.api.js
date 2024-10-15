@@ -2,9 +2,13 @@ import axios from 'axios';
 import authService from './authService';
 
 // Configuración de la URL base según el entorno
-const URL = process.env.NODE_ENV === 'production'
+// const URL = process.env.NODE_ENV === 'production'
+//   ? import.meta.env.VITE_BACKEND_URL
+//   : 'https://rerportes.click';
+
+  const URL = process.env.NODE_ENV === 'production'
   ? import.meta.env.VITE_BACKEND_URL
-  : 'https://rerportes.click';
+  : 'http://127.0.0.1:8000/'; 
 
 // Crear instancias de Axios con configuraciones comunes
 const createApiInstance = (baseURL) => {
