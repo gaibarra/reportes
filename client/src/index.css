@@ -7,3 +7,16 @@ body {
   background-color: #061f57;
   color: aliceblue;
 }
+
+/* Ensure form controls show dark text when their background is light (fix white-on-white selects) */
+select,
+textarea,
+input,
+option {
+  color: #111827; /* dark slate */
+}
+
+/* Keep placeholders light but inputs text dark for readability */
+::placeholder {
+  color: #9ca3af;
+}

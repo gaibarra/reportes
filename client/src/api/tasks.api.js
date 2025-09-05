@@ -64,7 +64,23 @@ const eventosApi = createApiInstance(`${URL}/api/v1/tasks`);
 export const getAllTasks = () => tasksApi.get('/');
 export const getTask = id => tasksApi.get(`/${id}/`);
 export const createTask = task => tasksApi.post('/', task);
+// Create task with upload progress callback (for file uploads)
+export const createTaskWithProgress = (task, onUploadProgress) => {
+  return tasksApi.post('/', task, {
+    onUploadProgress: (progressEvent) => {
+      if (typeof onUploadProgress === 'function') onUploadProgress(progressEvent);
+    }
+  });
+};
 export const updateTask = (id, task) => tasksApi.put(`/${id}/`, task);
+// Update task with upload progress callback
+export const updateTaskWithProgress = (id, task, onUploadProgress) => {
+  return tasksApi.put(`/${id}/`, task, {
+    onUploadProgress: (progressEvent) => {
+      if (typeof onUploadProgress === 'function') onUploadProgress(progressEvent);
+    }
+  });
+};
 export const deleteTask = id => tasksApi.delete(`/${id}/`);
 
 export const deleteTaskImage = (id, imageField) => tasksApi.delete(`/${id}/delete-image/${imageField}/`);

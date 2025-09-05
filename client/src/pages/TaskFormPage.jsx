@@ -74,6 +74,8 @@ export function TaskFormPage() {
   const [coordNameInput, setCoordNameInput] = useState('');
   const [openEventosModal, setOpenEventosModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isCompressing, setIsCompressing] = useState(false);
   const [step, setStep] = useState(1); // 1: location, 2: details, 3: media
   const [showMapModal, setShowMapModal] = useState(false);
 
@@ -231,7 +233,7 @@ export function TaskFormPage() {
 
   // Resize/compress image files on the client to speed up mobile uploads.
   // Returns a Promise<File> when an image was processed, or the original File if no processing applied.
-  const resizeImageFile = (file, maxWidth = 1280, quality = 0.7) => {
+  const resizeImageFile = (file, maxWidth = 1024, quality = 0.6) => {
     return new Promise((resolve) => {
       if (!file || !(file instanceof File) || !file.type.startsWith('image/')) return resolve(file);
 
@@ -284,13 +286,52 @@ export function TaskFormPage() {
     }
 
     try {
-      // perform resize/compression
-      const compressed = await resizeImageFile(originalFile, 1280, 0.7);
-      formData.append(fieldName, compressed);
+      // perform resize/compression (prefer WebWorker if available)
+      let compressed = null;
+      if (typeof Worker !== 'undefined') {
+        try {
+          compressed = await compressImageWithWorker(originalFile, 1024, 0.6);
+        } catch (e) {
+          // worker failed, fall back to main-thread resize
+          compressed = await resizeImageFile(originalFile, 1024, 0.6);
+        }
+      } else {
+        compressed = await resizeImageFile(originalFile, 1024, 0.6);
+      }
+      formData.append(fieldName, compressed || originalFile);
     } catch (err) {
       // fallback to original file
       formData.append(fieldName, originalFile);
     }
+  };
+
+  // Try compressing image using a WebWorker (OffscreenCanvas). Returns a File or throws.
+  const compressImageWithWorker = (file, maxWidth = 1024, quality = 0.6) => {
+    return new Promise((resolve, reject) => {
+      try {
+        // Vite supports creating workers via URL import
+        const worker = new Worker(new URL('../workers/imageWorker.js', import.meta.url));
+        const id = String(Math.random()).slice(2);
+        const onMsg = (ev) => {
+          const data = ev.data || {};
+          if (data.id !== id) return;
+          worker.removeEventListener('message', onMsg);
+          worker.terminate();
+          if (data.success && data.blob) {
+            const newName = (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+            const newFile = new File([data.blob], newName, { type: 'image/jpeg' });
+            resolve(newFile);
+          } else {
+            reject(new Error(data.error || 'Worker compression failed'));
+          }
+        };
+        worker.addEventListener('message', onMsg);
+        // post file as transferable via structured clone (File is cloneable)
+        worker.postMessage({ id, file, maxWidth, quality });
+      } catch (err) {
+        reject(err);
+      }
+    });
   };
 
   const onSubmit = async (data) => {
@@ -316,8 +357,11 @@ export function TaskFormPage() {
       formData.append("prioridad", data.prioridad);
       formData.append("fecha_resolucion", moment(data.fechaResolucion).format("YYYY-MM-DDTHH:mm:ss"));
 
+  // show compression spinner while processing images
+  setIsCompressing(true);
   await appendFileToFormData(formData, "foto_inicial", data.foto_inicial);
   await appendFileToFormData(formData, "foto_final", data.foto_final);
+  setIsCompressing(false);
 
       if (selectedUbicacionId) {
         formData.append('ubicacion', selectedUbicacionId);
@@ -338,7 +382,12 @@ export function TaskFormPage() {
         const reportadoPorId = Number(user.pk);
         if (isNaN(reportadoPorId)) throw new Error(`Invalid user ID: ${user.pk}`);
         formData.append("reportado_por", reportadoPorId);
-        created = await createTaskContext(formData);
+        created = await createTaskContext(formData, (progressEvent) => {
+          try {
+            const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+            setUploadProgress(percent);
+          } catch (e) { /* ignore */ }
+        });
         isNewReport = true;
       } else {
         if (data.done === true) {
@@ -346,7 +395,12 @@ export function TaskFormPage() {
           if (isNaN(resueltoPorId)) throw new Error(`Invalid user ID: ${user.pk}`);
           formData.append("resuelto_por", resueltoPorId);
         }
-        created = await updateTaskContext(params.id, formData);
+        created = await updateTaskContext(params.id, formData, (progressEvent) => {
+          try {
+            const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+            setUploadProgress(percent);
+          } catch (e) { /* ignore */ }
+        });
       }
 
       if (!created) throw new Error('No response from server when saving the report');
@@ -373,12 +427,13 @@ export function TaskFormPage() {
       setFinalImageUrl(created.foto_final);
       navigate("/tasks");
 
-    } catch (error) {
+  } catch (error) {
       console.error('Error in onSubmit:', error);
       const serverMessage = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
       Swal.fire({ icon: 'error', title: 'Error', text: `Error al guardar el reporte: ${serverMessage}` });
     } finally {
-      setLoading(false);
+  setLoading(false);
+  setUploadProgress(0);
     }
   };
 
@@ -531,7 +586,26 @@ export function TaskFormPage() {
               )}
             </div>
 
+            {/* upload progress bar */}
+            {uploadProgress > 0 && (
+              <div className="w-full mb-2">
+                <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
+                  <div className="bg-emerald-500 h-2" style={{ width: `${uploadProgress}%` }} />
+                </div>
+                <div className="text-xs text-gray-600 mt-1">Subiendo: {uploadProgress}%</div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
+              {isCompressing && (
+                <div className="flex items-center gap-2 mr-4">
+                  <svg className="animate-spin h-5 w-5 text-gray-600" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                  </svg>
+                  <div className="text-sm text-gray-700">Comprimiendo imagen...</div>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <label className="text-gray-700 font-semibold">Estado</label>
                 <select id="done" {...register("done")} className="bg-gray-50 p-2 rounded border border-gray-200">

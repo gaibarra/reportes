@@ -56,10 +56,15 @@ export const ReportesProvider = ({ children }) => {
 		}
 	}, []);
 
-	const createTask = useCallback(async (taskData) => {
+	const createTask = useCallback(async (taskData, onUploadProgress) => {
 		start();
 		try {
-			const res = await tasksApi.createTask(taskData);
+			let res;
+			if (typeof onUploadProgress === 'function') {
+				res = await tasksApi.createTaskWithProgress(taskData, onUploadProgress);
+			} else {
+				res = await tasksApi.createTask(taskData);
+			}
 			const created = res.data || res;
 			dispatch({ type: actionTypes.ADD_TASK, payload: created });
 			return created;
@@ -69,10 +74,15 @@ export const ReportesProvider = ({ children }) => {
 		}
 	}, []);
 
-	const updateTask = useCallback(async (id, taskData) => {
+	const updateTask = useCallback(async (id, taskData, onUploadProgress) => {
 		start();
 		try {
-			const res = await tasksApi.updateTask(id, taskData);
+			let res;
+			if (typeof onUploadProgress === 'function') {
+				res = await tasksApi.updateTaskWithProgress(id, taskData, onUploadProgress);
+			} else {
+				res = await tasksApi.updateTask(id, taskData);
+			}
 			const updated = res.data || res;
 			dispatch({ type: actionTypes.UPDATE_TASK, payload: updated });
 			return updated;
