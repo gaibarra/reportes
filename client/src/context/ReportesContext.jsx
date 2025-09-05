@@ -4,7 +4,7 @@ import * as tasksApi from '../api/tasks.api';
 
 export const ReportesContext = createContext(null);
 
-import { initialState, reducer, actionTypes } from './reportesReducer.mjs';
+import { initialState, reducer, actionTypes } from './reportesReducer.js';
 
 // reducer and actionTypes are imported from reportesReducer.js
 

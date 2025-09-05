@@ -229,9 +229,67 @@ export function TaskFormPage() {
 
   // suggestedLocation helpers intentionally removed; suggestions flow not used in redesigned form
 
-  const appendFileToFormData = (formData, fieldName, file) => {
-    if (file && file[0] instanceof File) {
-      formData.append(fieldName, file[0]);
+  // Resize/compress image files on the client to speed up mobile uploads.
+  // Returns a Promise<File> when an image was processed, or the original File if no processing applied.
+  const resizeImageFile = (file, maxWidth = 1280, quality = 0.7) => {
+    return new Promise((resolve) => {
+      if (!file || !(file instanceof File) || !file.type.startsWith('image/')) return resolve(file);
+
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        try {
+          const ratio = img.width / img.height || 1;
+          const targetWidth = Math.min(maxWidth, img.width);
+          const targetHeight = Math.round(targetWidth / ratio);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext('2d');
+          // draw the image into canvas
+          ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+          // convert to blob (jpeg) with specified quality
+          canvas.toBlob((blob) => {
+            if (!blob) return resolve(file);
+            // preserve original filename but change extension to .jpg
+            const newName = (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+            const newFile = new File([blob], newName, { type: 'image/jpeg' });
+            URL.revokeObjectURL(url);
+            resolve(newFile);
+          }, 'image/jpeg', quality);
+        } catch (err) {
+          URL.revokeObjectURL(url);
+          resolve(file);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+      img.src = url;
+    });
+  };
+
+  // Append a FileList (from react-hook-form) to FormData after optional resizing.
+  const appendFileToFormData = async (formData, fieldName, fileList) => {
+    if (!fileList || !(fileList[0] instanceof File)) return;
+    const originalFile = fileList[0];
+    // If already small or not an image, keep as-is. Otherwise resize to reduce upload time.
+    const maxSizeForSkip = 300 * 1024; // 300KB skip resizing
+    if (!originalFile.type.startsWith('image/') || originalFile.size <= maxSizeForSkip) {
+      formData.append(fieldName, originalFile);
+      return;
+    }
+
+    try {
+      // perform resize/compression
+      const compressed = await resizeImageFile(originalFile, 1280, 0.7);
+      formData.append(fieldName, compressed);
+    } catch (err) {
+      // fallback to original file
+      formData.append(fieldName, originalFile);
     }
   };
 
@@ -258,8 +316,8 @@ export function TaskFormPage() {
       formData.append("prioridad", data.prioridad);
       formData.append("fecha_resolucion", moment(data.fechaResolucion).format("YYYY-MM-DDTHH:mm:ss"));
 
-      appendFileToFormData(formData, "foto_inicial", data.foto_inicial);
-      appendFileToFormData(formData, "foto_final", data.foto_final);
+  await appendFileToFormData(formData, "foto_inicial", data.foto_inicial);
+  await appendFileToFormData(formData, "foto_final", data.foto_final);
 
       if (selectedUbicacionId) {
         formData.append('ubicacion', selectedUbicacionId);
@@ -449,7 +507,7 @@ export function TaskFormPage() {
           <div className={`space-y-4 step-panel ${step===3 ? 'step-open' : 'step-closed'}`}>
             <div>
               <label className="block text-gray-700 mb-1 font-semibold">Imagen inicial</label>
-              {initialImageUrl ? (
+                {initialImageUrl ? (
                 <div className="flex items-center gap-3">
                   <img src={initialImageUrl} alt="Imagen inicial" className="w-32 h-20 object-cover rounded" />
                   <div className="flex-1">
@@ -457,7 +515,7 @@ export function TaskFormPage() {
                   </div>
                 </div>
               ) : (
-                <input type="file" id="fotoInicial" {...register("foto_inicial")} className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50" />
+                <input type="file" id="fotoInicial" accept="image/*" capture="environment" {...register("foto_inicial")} className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50" />
               )}
             </div>
 
@@ -469,7 +527,7 @@ export function TaskFormPage() {
                   <button type="button" onClick={handleDeleteImage} className="px-3 py-2 bg-red-500 text-white rounded">Eliminar</button>
                 </div>
               ) : (
-                <input type="file" id="fotoFinal" {...register("foto_final")} className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50" />
+                <input type="file" id="fotoFinal" accept="image/*" capture="environment" {...register("foto_final")} className="w-full p-3 rounded-lg border border-gray-200 bg-gray-50" />
               )}
             </div>
 

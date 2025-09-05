@@ -16,10 +16,13 @@ window.addEventListener('auth:logout', () => {
     Swal.fire({
       icon: 'info',
       title: 'Sesión expirada',
-      text: 'Su sesión ha expirado. Por favor, inicie sesión de nuevo.',
-      confirmButtonText: 'Ir al login'
-    }).then(() => {
-      window.location.href = '/login';
+      text: 'Su sesión ha expirado. Puede volver a iniciar sesión o permanecer en la página para copiar su trabajo.',
+      showCancelButton: true,
+      confirmButtonText: 'Ir al login',
+      cancelButtonText: 'Permanecer'
+    }).then((result) => {
+      if (result.isConfirmed) window.location.href = '/login';
+      // if canceled, do nothing — user can copy data or attempt manual re-login
     });
   } catch (e) {
     // Fallback: redirect directly

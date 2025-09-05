@@ -1,156 +1,133 @@
 import axios from 'axios';
+import axiosInstance from './axiosInstance';
 
-// const API_URL = process.env.VITE_BACKEND_URL || 'https://rerportes.click';
-const API_URL = process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
-const BASE_URL = String(API_URL).replace(/\/+$/, '');
+// Base API URL without trailing slash
+const API_URL = (process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 
-const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+// Internal state for refresh scheduling and concurrent refresh handling
+let _refreshPromise = null;
+let _refreshTimeoutId = null;
 
-// Agrega un interceptor para añadir el token a las cabeceras
-api.interceptors.request.use(
-  config => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  error => Promise.reject(error)
-);
-
-const login = async (username, password) => {
+function _decodeJwt(token) {
   try {
-  const response = await api.post('/api/token/', { username, password });
-
-    if (response.status !== 200) {
-      throw new Error(`La solicitud falló con el código de estado ${response.status}`);
-    }
-
-    const { access, refresh } = response.data;
-
-    localStorage.setItem('accessToken', access);
-    localStorage.setItem('refreshToken', refresh);
-    
-    return { access, refresh };
-  } catch (error) {
-    if (error.response) {
-      console.error('Error durante el inicio de sesión:', error.response.data);
-      throw new Error(error.response.data.detail || 'Inicio de sesión fallido');
-    } else if (error.request) {
-      console.error('No se recibió respuesta:', error.request);
-      throw new Error('No hay respuesta del servidor');
-    } else {
-      console.error('Error al configurar la solicitud:', error.message);
-      throw new Error('Error al configurar la solicitud');
-    }
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return decoded;
+  } catch (e) {
+    return null;
   }
+}
+
+function scheduleTokenRefresh() {
+  // Clear previous schedule
+  if (_refreshTimeoutId) {
+    clearTimeout(_refreshTimeoutId);
+    _refreshTimeoutId = null;
+  }
+  const access = localStorage.getItem('accessToken');
+  if (!access) return;
+  const payload = _decodeJwt(access);
+  if (!payload || !payload.exp) return;
+  const expiresAt = payload.exp * 1000; // ms
+  const now = Date.now();
+  // schedule refresh 60s before expiry, or at 50% of remaining time if very short
+  const msUntil = Math.max(1000, expiresAt - now - 60000);
+  // If token already expired or near-expired, refresh immediately
+  if (expiresAt - now <= 5000) {
+    _refreshTimeoutId = setTimeout(() => {
+      refreshToken().catch(() => {});
+    }, 0);
+    return;
+  }
+  _refreshTimeoutId = setTimeout(() => {
+    refreshToken().catch(() => {});
+  }, msUntil);
+}
+
+function cancelScheduledRefresh() {
+  if (_refreshTimeoutId) {
+    clearTimeout(_refreshTimeoutId);
+    _refreshTimeoutId = null;
+  }
+}
+
+/**
+ * Log in user and store tokens
+ */
+export const login = async (username, password) => {
+  const { data } = await axios.post(`${API_URL}/api/token/`, { username, password });
+  const { access, refresh } = data;
+  localStorage.setItem('accessToken', access);
+  localStorage.setItem('refreshToken', refresh);
+  // Schedule automatic refresh based on token exp
+  try { scheduleTokenRefresh(); } catch (e) { console.debug('scheduleTokenRefresh failed at login', e); }
+  return data;
 };
 
-const getRefreshToken = () => localStorage.getItem('refreshToken');
-
-const refreshToken = async () => {
-  const refresh = getRefreshToken();
-  if (!refresh) {
-    const err = new Error('No refresh token available');
-    console.warn('refreshToken: no refresh token found in storage');
-    logout();
-    throw err;
-  }
-
-  try {
-    // Use axios directly to avoid hitting interceptors on `api` which could cause recursion
-  const url = `${BASE_URL}/api/token/refresh/`;
-  console.debug('Attempting token refresh; refresh token present:', !!refresh, 'length:', refresh ? refresh.length : 0);
-  const response = await axios.post(url, { refresh }, { headers: { 'Content-Type': 'application/json' } });
-  console.debug('Refresh response status:', response.status);
-
-    if (response.status === 200 && response.data && response.data.access) {
-      const { access } = response.data;
-      localStorage.setItem('accessToken', access);
-      return access;
-    }
-
-    // If server responds but no access token provided, treat as failure
-    throw new Error('Failed to refresh token: no access token in response');
-  } catch (error) {
-    console.error('Error refreshing token:', error.response ? error.response.data : error.message || error);
-    logout();
-    throw error;
-  }
-};
-
-const getUserData = async () => {
-  try {
-    const token = getCurrentUser();
-    const response = await api.get('/api/v1/user/', {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    if (response.status === 200) {
-      return response.data;
-    }
-    throw new Error('Failed to fetch user data');
-  } catch (error) {
-    console.error('Error fetching user data:', error);
-    throw error;
-  }
-};
-
-const getCurrentUser = () => {
-  return localStorage.getItem('accessToken');
-};
-
-const logout = () => {
+/**
+ * Log out user and clear tokens
+ */
+export const logout = () => {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
-  try {
-    // notify the UI that a logout occurred (e.g., token refresh failed)
-    window.dispatchEvent(new CustomEvent('auth:logout'));
-  } catch (e) {
-    console.warn('Could not dispatch auth:logout event', e);
+  cancelScheduledRefresh();
+  window.dispatchEvent(new CustomEvent('auth:logout'));
+};
+
+/**
+ * Refresh access token using refresh token
+ */
+export const refreshToken = async () => {
+  const refresh = localStorage.getItem('refreshToken');
+  if (!refresh) {
+    logout();
+    throw new Error('No refresh token available');
   }
+  // coalesce concurrent refresh attempts
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = (async () => {
+    try {
+      const { data } = await axios.post(
+        `${API_URL}/api/token/refresh/`,
+        { refresh },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+      const { access } = data;
+      localStorage.setItem('accessToken', access);
+      // reschedule next refresh
+  try { scheduleTokenRefresh(); } catch (e) { console.debug('scheduleTokenRefresh failed after refresh', e); }
+      return access;
+    } catch (err) {
+      // give one last chance and then logout gracefully
+      console.error('Refresh token request failed', err);
+      logout();
+      throw err;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+  return _refreshPromise;
+};
+
+/**
+ * Get current access token
+ */
+export const getCurrentUser = () => localStorage.getItem('accessToken');
+
+/**
+ * Fetch user data
+ */
+export const getUserData = async () => {
+  const { data } = await axiosInstance.get('/api/v1/user/');
+  return data;
 };
 
 export default {
   login,
-  refreshToken,
-  getUserData,
-  getCurrentUser,
   logout,
+  refreshToken,
+  getCurrentUser,
+  getUserData,
+  scheduleTokenRefresh,
+  cancelScheduledRefresh,
 };
-
-// Agrega interceptores para manejar la renovación automática del token
-api.interceptors.response.use(
-  response => response,
-  async error => {
-    const originalRequest = error.config || {};
-
-    // Don't try to refresh if the failing request was the refresh endpoint itself
-    const url = originalRequest.url || '';
-    if (url.includes('/api/token/refresh/') || url.includes('/api/token/')) {
-      return Promise.reject(error);
-    }
-
-    if (error.response && error.response.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      try {
-        const newToken = await refreshToken();
-        api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-        originalRequest.headers = originalRequest.headers || {};
-        originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
-        return api(originalRequest);
-      } catch (e) {
-        console.error('No se pudo renovar el token', e);
-        logout();
-        return Promise.reject(error);
-      }
-    }
-    return Promise.reject(error);
-  }
-);

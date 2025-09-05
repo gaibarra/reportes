@@ -15,6 +15,8 @@ export const AuthProvider = ({ children }) => {
         .then(userData => {
           setUser(userData);
           setIsAuthenticated(true);
+          // schedule refresh for this token
+          try { authService.scheduleTokenRefresh(); } catch (e) { console.debug('scheduleTokenRefresh failed at mount', e); }
         })
         .catch(error => {
           console.error('Error fetching user data:', error);
@@ -37,7 +39,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    authService.logout();
+  // cancel scheduled refresh and logout
+  try { authService.cancelScheduledRefresh(); } catch (e) { console.debug('cancelScheduledRefresh failed', e); }
+  authService.logout();
     setUser(null);
     setIsAuthenticated(false);
   };

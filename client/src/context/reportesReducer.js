@@ -1,5 +1,5 @@
 // Reducer and constants for Reportes context — extracted for testing
-const initialState = {
+export const initialState = {
   tasks: [],
   currentTask: null,
   empleados: [],
@@ -8,7 +8,7 @@ const initialState = {
   error: null,
 };
 
-const actionTypes = {
+export const actionTypes = {
   START: 'START',
   FAIL: 'FAIL',
   SET_TASKS: 'SET_TASKS',
@@ -22,8 +22,7 @@ const actionTypes = {
   UPDATE_EVENTO: 'UPDATE_EVENTO',
   REMOVE_EVENTO: 'REMOVE_EVENTO',
 };
-
-function reducer(state = initialState, action) {
+export function reducer(state = initialState, action) {
   switch (action.type) {
     case actionTypes.START:
       return { ...state, loading: true, error: null };
@@ -77,4 +76,8 @@ function reducer(state = initialState, action) {
   }
 }
 
-module.exports = { initialState, actionTypes, reducer };
+// Provide CommonJS exports as well for environments (like Jest) that `require()` this file.
+/* eslint-disable no-undef */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { initialState, actionTypes, reducer };
+}

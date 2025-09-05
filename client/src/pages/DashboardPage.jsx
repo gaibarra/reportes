@@ -1,4 +1,5 @@
 import { useEffect, useState, useContext } from 'react';
+import api from '../api/axiosInstance';
 import { getDashboardOverview, getTaskTimeline } from '../api/dashboard.api';
 import Timeline from '../components/Timeline';
 import { useReportes } from '../context/ReportesContext.jsx';
@@ -11,6 +12,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import { AuthContext } from '../context/AuthContext.jsx';
 import { useNavigate } from 'react-router-dom';
+import InfoCard from '../components/InfoCard';
 
 export default function DashboardPage() {
   const [overview, setOverview] = useState(null);
@@ -44,21 +46,6 @@ export default function DashboardPage() {
     };
 
     fetchOverview();
-  }, []);
-
-  // Refresh overview automatically when tasks list changes (e.g., after creating a report)
-  useEffect(() => {
-    const fetchOverview = async () => {
-      try {
-        const res = await getDashboardOverview();
-        setOverview(res.data || res);
-      } catch (err) {
-        console.error('Error refreshing dashboard overview', err);
-      }
-    };
-
-    // Only refetch if tasks is defined (avoid initial double-fetch)
-    if (Array.isArray(tasks)) fetchOverview();
   }, [tasks]);
 
   useEffect(() => {
@@ -74,7 +61,16 @@ export default function DashboardPage() {
   const handleCreateEvent = async () => {
     if (!newEventTask || !newEventDesc) return;
     try {
-  await createEvento(newEventTask.id, { descripcion: newEventDesc, empleado: null });
+      // try to fetch the current user's Empleado record (endpoint returns empleado for current token)
+      let empleadoId = null;
+      try {
+        const resp = await api.get('/api/v1/empleado-detail/');
+        const empleadoData = resp.data;
+        if (empleadoData && empleadoData.id) empleadoId = empleadoData.id;
+      } catch (err) {
+        console.debug('No empleado detail available for current user, sending null empleado', err);
+      }
+      await createEvento(newEventTask.id, { descripcion: newEventDesc, empleado: empleadoId });
       setOpenNewEvent(false);
       setNewEventDesc('');
       setNewEventTask(null);
@@ -108,8 +104,8 @@ export default function DashboardPage() {
 
       <div className="mb-6 flex items-center justify-between">
         <div className="hidden sm:flex gap-3">
-          <Button variant="contained" color="primary" onClick={() => navigate('/tasks')}>Tareas existentes</Button>
-          <Button variant="contained" color="success" onClick={() => navigate('/tasks-create')}>Nueva Tarea</Button>
+          <Button variant="contained" color="primary" onClick={() => navigate('/tasks')}>Reportes existentes</Button>
+          <Button variant="contained" color="success" onClick={() => navigate('/tasks-create')}>Nuevo Reporte</Button>
           <Button variant="contained" color="warning" onClick={() => setOpenNewEvent(true)}>Nuevo Evento</Button>
         </div>
         {/* compact mobile actions */}
@@ -122,8 +118,8 @@ export default function DashboardPage() {
             if (v === 'logout') { logout(); navigate('/login'); }
           }}>
             <option value="">Acciones</option>
-            <option value="tasks">Tareas existentes</option>
-            <option value="create">Nueva Tarea</option>
+            <option value="tasks">Reportes existentes</option>
+            <option value="create">Nuevo Reporte</option>
             <option value="logout">Salir</option>
           </select>
         </div>
@@ -171,19 +167,11 @@ export default function DashboardPage() {
         </DialogActions>
       </Dialog>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="p-4 bg-white rounded shadow">
-          <div className="text-sm text-gray-500">Total de casos</div>
-          <div className="text-3xl font-bold">{overview ? overview.total_tasks : '...'}</div>
-        </div>
-        <div className="p-4 bg-white rounded shadow">
-          <div className="text-sm text-gray-500">Abiertos</div>
-          <div className="text-3xl font-bold">{overview ? overview.open_tasks : '...'}</div>
-        </div>
-        <div className="p-4 bg-white rounded shadow">
-          <div className="text-sm text-gray-500">Cerrados</div>
-          <div className="text-3xl font-bold">{overview ? overview.closed_tasks : '...'}</div>
-        </div>
+      {/* Summary cards using InfoCard */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <InfoCard title="Total de casos" value={overview ? overview.total_tasks : '...'} />
+        <InfoCard title="Abiertos" value={overview ? overview.open_tasks : '...'} />
+        <InfoCard title="Cerrados" value={overview ? overview.closed_tasks : '...'} />
       </div>
 
       <div className="grid grid-cols-2 gap-6">
