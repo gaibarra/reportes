@@ -1,0 +1,20 @@
+Se registró un avance
+
+{% if tarea %}
+Tarea: {{ tarea.title }}
+{% endif %}
+
+{% if report %}
+Reporte: {{ report.title }}
+
+{{ report.description }}
+{% endif %}
+
+Avance:
+{{ evento.descripcion }}
+
+{% if site_url and tarea %}
+Ver la tarea en: {{ site_url }}/tasks/{{ tarea.id }}
+{% endif %}
+
+Este es un mensaje automático.

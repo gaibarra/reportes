@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Avance registrado</title>
+  </head>
+  <body>
+    <h2>Se registró un avance</h2>
+    {% if tarea %}
+      <p><strong>Tarea:</strong> {{ tarea.title }}</p>
+    {% endif %}
+
+    {% if report %}
+      <h3>Reporte</h3>
+      <p><strong>{{ report.title }}</strong></p>
+      <p>{{ report.description }}</p>
+    {% endif %}
+
+    <h3>Avance</h3>
+    <p>{{ evento.descripcion }}</p>
+
+    {% if site_url and tarea %}
+      <p>Ver la tarea en: <a href="{{ site_url }}/tasks/{{ tarea.id }}">{{ site_url }}/tasks/{{ tarea.id }}</a></p>
+    {% endif %}
+
+    <hr />
+    <p>Este es un mensaje automático.</p>
+  </body>
+</html>
